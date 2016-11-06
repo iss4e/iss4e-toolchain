@@ -1,6 +1,5 @@
 # Ignores spiecific to this repository
-# If you want to add a file that would be ignored (e.g. a config.ini *not* containing passwords), use `git add -f file`
-*.ini
+# If you want to add a file that would be ignored (e.g. a iss4e.conf *not* containing passwords), use `git add -f file`
 tmp/
 
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio and Webstorm

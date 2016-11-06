@@ -37,6 +37,7 @@ setup(
         # further tools
         'PyYAML>=3.12',
         'more-itertools>=2.2',
-        'tabulate>=0.7.5'
+        'tabulate>=0.7.5',
+        'pyhocon>=0.3.34'
     ]
 )
