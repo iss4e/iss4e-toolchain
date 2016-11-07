@@ -1,5 +1,6 @@
 import logging.config
 import os
+import sys
 from os.path import join, dirname, expanduser
 
 from pyhocon import ConfigFactory
@@ -101,6 +102,7 @@ def load_config(cwd=os.getcwd()):
                if os.path.isfile(file)]
     # merge all levels of config
     config = ConfigTree(root=True)
+    config.put("__main__", os.path.basename(sys.modules['__main__'].__file__))
     for c in configs:
         config = ConfigTree.merge_configs(c, config)
     config = ConfigParser.resolve_substitutions(config)
