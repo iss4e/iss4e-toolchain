@@ -6,6 +6,7 @@ from os.path import join, dirname, expanduser
 from pyhocon import ConfigFactory
 from pyhocon import ConfigParser
 from pyhocon import ConfigTree
+from pyhocon import HOCONConverter
 
 
 def get_parents(leaf, include_leaf=False):
@@ -51,7 +52,7 @@ def find_files(name, cwd):
     ]
 
 
-def load_config(cwd=os.getcwd()):
+def load_config(cwd=os.getcwd(), debug=False):
     """
     Tries to find HOCON files named "iss4e.conf" using the paths returned by find_files().
     The found files are then parsed and merged together, so that a single configuration dict is returned.
@@ -100,14 +101,21 @@ def load_config(cwd=os.getcwd()):
     files = find_files("iss4e.conf", cwd)
     configs = [ConfigFactory.parse_file(file, required=False, resolve=False) for file in files
                if os.path.isfile(file)]
+    if debug:
+        print("Config files:\n" + "\n".join(
+            file + " [" + ("not " if not os.path.isfile(file) else "") + "found]" for file in files))
     # merge all levels of config
     config = ConfigTree(root=True)
     config.put("__main__", os.path.basename(sys.modules['__main__'].__file__))
     for c in configs:
         config = ConfigTree.merge_configs(c, config)
     config = ConfigParser.resolve_substitutions(config)
+    if debug:
+        print("Loaded config:\n" + HOCONConverter.to_json(config))
 
     # if config contains a key "logging", use it to reconfigure python logging
     if "logging" in config:
+        if debug:
+            print("Reconfiguring logging from config")
         logging.config.dictConfig(config["logging"])
     return config
