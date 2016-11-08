@@ -9,7 +9,7 @@ The code in this repository follows the standard python coding conventions as de
 [PEP 8](https://www.python.org/dev/peps/pep-0008/).
 The main points (plus our peculiarities) are:
 - always use UTF-8 and UNIX-style `\n` line endings
-- 4 spaces for indetation
+- 4 spaces for indentation
 - module, file, local variable and function names `lowercase_with_underscores`
 - only class names CamelCase
 - see the `__init__.py` in each directory for details like the exported symbols
