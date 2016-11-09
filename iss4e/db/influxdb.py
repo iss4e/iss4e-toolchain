@@ -55,7 +55,7 @@ influxdb.client.ResultSet = ExtendedResultSet
 
 def escape_series_tag(p):
     k, v = p.split("=")
-    return "{}='{}'".format(k, v)
+    return "{}::tag='{}'".format(k, v)
 
 
 class QueryStreamer(object):
