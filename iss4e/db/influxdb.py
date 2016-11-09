@@ -58,26 +58,29 @@ def escape_series_tag(p):
     return "{}='{}'".format(k, v)
 
 
-def async_decorate(func):
-    """
-    Transform the iterable of iterables returned by the function depending on whether
-    InfluxDBStreamingClient.async_executor and InfluxDBStreamingClient.batched are set.
+class QueryStreamer(object):
+    def __init__(self, query_func, query_format, batch_size):
+        self.query_func = query_func
+        self.query_format = query_format
+        self.batch_size = itertools.repeat(batch_size)
+        self.offset = itertools.count(0, batch_size)
 
-    If an async_executor is available, the iterable will be wrapped in an AsyncLookaheadIterator, that will use the
-    executor to asynchronously fetch data in the background before it is consumed from the iterable.
+    def __iter__(self):
+        return self
 
-    If batched is False, the iterable of iterables will be flattened to a simple iterable.
-    """
+    def __next__(self):
+        query = self.query_format.format(offset=next(self.offset), limit=next(self.batch_size))
+        before = time.perf_counter()
+        async_logger.debug(" < block before")
+        result = self.query_func(query)
+        async_logger.debug(" > block after, blocked for {}s".format(time.perf_counter() - before))
 
-    def func_wrapper(self, *args, **kwargs):
-        iter = func(self, *args, **kwargs)
-        if self.async_executor:
-            iter = AsyncLookaheadIterator(self.async_executor, iter, logger=async_logger, warm_start=True)
-        if not self.batched:
-            iter = itertools.chain.from_iterable(iter)
-        return iter
-
-    return func_wrapper
+        # peek into the result, if it is empty, we read all values from this series
+        points = peekable(result.get_points())
+        if not points.peek(None):
+            raise StopIteration
+        else:
+            return points
 
 
 class InfluxDBStreamingClient(InfluxDBClient):
@@ -99,15 +102,18 @@ class InfluxDBStreamingClient(InfluxDBClient):
         series_res = self.query("SHOW SERIES FROM \"{}\"".format(measurement))
         series = (v['key'].split(",")[1:] for v in series_res.get_points())
         # for each series, create a WHERE clause selecting only entries from that exact series
-        series_selectors = (" AND ".join(escape_series_tag(v) for v in a) for a in series)
-
-        # iterate all series independently
-        for sselector in series_selectors:
+        series_selectors = [" AND ".join(escape_series_tag(v) for v in a) for a in series]
+        # and create and independent row stream for each of those selectors
+        series_stream = [self.stream_params(
+            measurement=measurement,
+            fields=fields,
             # join series WHERE clause and WHERE clause from params
-            selector = " AND ".join("({})".format(w) for w in [where, sselector] if w)
+            selector=" AND ".join("({})".format(w) for w in [where, sselector] if w),
+            group_order_by=group_order_by,
+            batch_size=batch_size
+        ) for sselector in series_selectors]
 
-            # paginate entries in this series
-            yield (sselector, self.stream_params(measurement, fields, selector, group_order_by, batch_size))
+        return zip(series_selectors, series_stream)
 
     def stream_params(self, measurement, fields=None, selector="", group_order_by="", batch_size=DEFAULT_BATCH_SIZE):
         if fields is None:
@@ -120,23 +126,19 @@ class InfluxDBStreamingClient(InfluxDBClient):
             fields=fields, measurement=measurement,
             where=selector, group_order_by=group_order_by)
 
-        yield from self.stream_query(base_query, batch_size)
+        return self.stream_query(base_query, batch_size)
 
-    @async_decorate
     def stream_query(self, query_format, batch_size):
-        for offset in itertools.count(0, batch_size):
-            query = query_format.format(offset=offset, limit=batch_size)
-            before = time.perf_counter()
-            async_logger.debug(" < block before")
-            result = self.query(query)
-            async_logger.debug(" > block after, blocked for {}s".format(time.perf_counter() - before))
+        streamer = QueryStreamer(self.query, query_format, batch_size)
 
-            # peek into the result, if it is empty, we read all values from this series
-            points = peekable(result.get_points())
-            if not points.peek(None):
-                break
-            else:
-                yield points
+        if self.async_executor:
+            # If an async_executor is available, the iterable will be wrapped in an AsyncLookaheadIterator, that will
+            # use the executor to asynchronously fetch data in the background before it is consumed from the streamer.
+            streamer = AsyncLookaheadIterator(self.async_executor, streamer, logger=async_logger, warm_start=True)
+        if not self.batched:
+            # If batched is False, the streamer of iterables will be flattened to a simple iterable.
+            streamer = itertools.chain.from_iterable(streamer)
+        return streamer
 
     def _batches(self, iterable, size):
         """The default _batched implementation can't handle iterables, only lists. This one handles both."""
