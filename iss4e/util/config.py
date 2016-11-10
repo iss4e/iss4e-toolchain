@@ -117,9 +117,5 @@ def load_config(cwd=os.getcwd(), debug=False):
     if "logging" in config:
         if debug:
             print("Reconfiguring logging from config")
-        loggers = config["logging"].get("loggers", [])
-        for logger in loggers:
-            # pyhocon doesn't remove quotes from identifier
-            loggers[logger.replace('"', '')] = loggers[logger]
-        logging.config.dictConfig(config["logging"])
+        logging.config.dictConfig(config["logging"].as_plain_ordered_dict())
     return config
