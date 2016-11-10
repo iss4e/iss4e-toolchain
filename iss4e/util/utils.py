@@ -74,12 +74,16 @@ def progress(iterable, delay=5, remote=None, **kwargs):
             last_print = now
             last_rows = nr
 
+    if remote:  # always report status to remote at the beginning
+        remote((pid, nr))
     for nr, val in enumerate(iterable):
         # TODO should update be called before or after yielding (or both)?
         update(last_print)
         yield val
         # update(last_print)
     update(start)
+    if remote:  # always report status to remote at the end
+        remote((pid, nr))
 
 
 def async_progress(futures, queue, delay=5, **kwargs):
@@ -101,7 +105,7 @@ def async_progress(futures, queue, delay=5, **kwargs):
                     break
             now = perf_counter()
             count = sum(stats.values())
-            _print_progress("{}-{}/{} ".format(nr, len(stats), len(futures)) + msg,
+            _print_progress("{}-{}/{} ".format(len([f for f in futures if f.done()]), len(stats), len(futures)) + msg,
                             count=count, time=now - start,
                             rate=((count - last_count) / (now - last_print)),
                             avgrate=(count / (now - start)), value=None, **kwargs)
