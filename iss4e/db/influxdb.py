@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 import influxdb.resultset
 from influxdb import InfluxDBClient
+from influxdb.exceptions import InfluxDBClientError
 from iss4e.util import AsyncLookaheadIterator
 from iss4e.util import BraceMessage as __
 from more_itertools import peekable
@@ -161,6 +162,16 @@ class InfluxDBStreamingClient(InfluxDBClient):
         result = super().query(params=params, *args, **kwargs)
         result.time_field, result.time_format, result.time_epoch = (time_field, time_format, time_epoch)
         return result
+
+    def drop_measurement(self, name):
+        try:
+            self.query("DROP MEASUREMENT \"{}\"".format(name))
+            return True
+        except InfluxDBClientError as e:
+            if str(e).startswith('measurement not found'):
+                return False
+            else:
+                raise
 
 
 @contextmanager
