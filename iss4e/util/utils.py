@@ -1,6 +1,9 @@
+import concurrent.futures
 import inspect
 import logging
+import random
 from datetime import datetime, timedelta
+from queue import Empty
 from time import perf_counter
 
 from iss4e.util.brace_message import BraceMessage as __
@@ -29,37 +32,80 @@ def zip_prev(iterable):
         last_val = val
 
 
-def progress(iterable, logger=logging, level=logging.INFO, delay=5,
-             msg="{verb} {countf} {name} after {timef}s ({ratef}/{avgratef} {name} per second)",
-             objects="entries", verb="Processed"):
+def _prepare_message(**kwargs):
+    verb = kwargs.pop('verb ', "Processed")
+    objects = kwargs.pop('objects ', "entries")
+    msg = kwargs.pop('msg ', "{verb} {countf} {objects} after {timef}s ({ratef}/{avgratef} {objects} per second)")
+    msg = msg.format(countf='{count:,}', timef='{time:.2f}', ratef='{rate:,.2f}', avgratef='{avgrate:,.2f}',
+                     objects=objects, verb=verb)
+    return msg
+
+
+def _print_progress(msg, count, time, rate, avgrate, value, **kwargs):
+    logger = kwargs.pop('logger', logging)
+    level = kwargs.pop('level ', logging.INFO)
+    logger.log(level, __(msg, count=count, time=time, rate=rate, avgrate=avgrate, value=value))
+
+
+def progress(iterable, delay=5, remote=None, **kwargs):
     """
     Print a short status message about the number of consumed items to `logger.level` every `delay` seconds as items are
     consumed from the given iterable.
     :return: a wrapped version of the given iterable
     """
-    msg = msg.format(countf='{count:,}', timef='{time:.2f}', ratef='{rate:,.2f}', avgratef='{avgrate:,.2f}',
-                     name=objects, verb=verb)
 
+    if remote:
+        pid = random.random()  # use a new ID for each invocation
+    msg = _prepare_message(**kwargs)
     last_print = start = perf_counter()
     last_rows = nr = 0
     val = None
 
-    def print(last):
+    def update(last):
         nonlocal last_rows, last_print
-        if (perf_counter() - last) > delay:
-            logger.log(level, __(msg, count=nr, time=perf_counter() - start, value=val,
-                                 rate=(nr - last_rows) / (perf_counter() - last_print),
-                                 avgrate=nr / (perf_counter() - start)))
-            last_print = perf_counter()
+        now = perf_counter()
+        if (now - last) > delay:
+            if remote:
+                remote((pid, nr))
+            else:
+                _print_progress(msg, count=nr, time=now - start,
+                                rate=((nr - last_rows) / (now - last_print)),
+                                avgrate=(nr / (now - start)), value=val, **kwargs)
+            last_print = now
             last_rows = nr
 
     for nr, val in enumerate(iterable):
-        # TODO should print be called before or after yielding (or both)?
-        print(last_print)
+        # TODO should update be called before or after yielding (or both)?
+        update(last_print)
         yield val
-        # print(last_print)
+        # update(last_print)
+    update(start)
 
-    print(start)
+
+def async_progress(futures, queue, delay=5, **kwargs):
+    msg = _prepare_message(**kwargs)
+    last_print = start = perf_counter()
+    last_count = count = 0
+    stats = {}
+    for nr, future in enumerate(futures):
+        while not future.done():
+            try:
+                future.result(timeout=delay)
+            except concurrent.futures.TimeoutError:
+                pass
+            while True:
+                try:
+                    pid, count = queue.get_nowait()
+                    stats[pid] = count
+                except Empty:
+                    break
+            now = perf_counter()
+            count = sum(stats.values())
+            _print_progress("{}-{}/{} ".format(nr, len(stats), len(futures)) + msg,
+                            count=count, time=now - start,
+                            rate=((count - last_count) / (now - last_print)),
+                            avgrate=(count / (now - start)), value=None, **kwargs)
+            last_count, last_print = count, now
 
 
 def dump_args(frame):
