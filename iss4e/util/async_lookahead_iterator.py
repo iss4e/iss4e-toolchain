@@ -1,4 +1,5 @@
 import logging
+import warnings
 from time import perf_counter
 
 my_logger = logging.getLogger(__name__)
@@ -35,3 +36,7 @@ class AsyncLookaheadIterator(object):
         except StopIteration:
             self._log.debug("]  wait stopped at end, waited for {}s".format(perf_counter() - before))
             raise
+
+    def __getstate__(self):
+        warnings.warn("Pickling an AsyncLookaheadIterator")
+        return super().__getstate__()

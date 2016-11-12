@@ -87,13 +87,18 @@ def progress(iterable, delay=5, remote=None, **kwargs):
 
 
 def async_progress(futures, queue, delay=5, **kwargs):
+    futures = list(futures)  # ensure that futures can be iterated multiple times and have a length
     msg = _prepare_message(**kwargs)
     last_print = start = perf_counter()
     last_count = count = 0
     stats = {}
     for nr, future in enumerate(futures):
         while not future.done():
+            # check whether any future failed
+            assert all([future.result() or True for future in futures if future.done()])
+
             try:
+                # wait 5 secs
                 future.result(timeout=delay)
             except concurrent.futures.TimeoutError:
                 pass

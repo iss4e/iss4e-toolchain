@@ -1,9 +1,12 @@
+import concurrent.futures
 import itertools
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
 import influxdb.resultset
+import requests
 from influxdb import InfluxDBClient
 from influxdb.exceptions import InfluxDBClientError
 from iss4e.util import AsyncLookaheadIterator
@@ -23,6 +26,7 @@ TO_SECONDS = {
 logger = logging.getLogger(__name__)
 async_logger = logger.getChild("async")
 _marker = object()
+thread_pool = None
 
 
 class ExtendedResultSet(influxdb.resultset.ResultSet):
@@ -54,9 +58,13 @@ influxdb.resultset.ResultSet = ExtendedResultSet
 influxdb.client.ResultSet = ExtendedResultSet
 
 
-def escape_series_tag(p):
+def series_tag_to_selector(p):
     k, v = p.split("=")
     return "{}::tag='{}'".format(k, v)
+
+
+def join_selectors(selectors):
+    return " AND ".join("({})".format(w) for w in selectors if w)
 
 
 class QueryStreamer(object):
@@ -98,25 +106,27 @@ class InfluxDBStreamingClient(InfluxDBClient):
         if hasattr(self, 'udp_socket'):
             self.udp_socket.close()
 
-    def stream_series(self, measurement, fields=None, where="", group_order_by="", batch_size=DEFAULT_BATCH_SIZE):
+    def list_series(self, measurement):
         # fetch all series for this measurement and parse the result
         series_res = self.query("SHOW SERIES FROM \"{}\"".format(measurement))
         series = (v['key'].split(",")[1:] for v in series_res.get_points())
         # for each series, create a WHERE clause selecting only entries from that exact series
-        series_selectors = [" AND ".join(escape_series_tag(v) for v in a) for a in series]
-        # and create and independent row stream for each of those selectors
+        return [(serie, join_selectors(series_tag_to_selector(tag) for tag in serie)) for serie in series]
+
+    def stream_measurement(self, measurement, fields=None, where="", group_order_by="", batch_size=DEFAULT_BATCH_SIZE):
+        series_selectors = [sselector for (sname, sselector) in self.list_series(measurement)]
+        # create an independent row stream for each of those selectors
         series_stream = [self.stream_params(
             measurement=measurement,
             fields=fields,
             # join series WHERE clause and WHERE clause from params
-            selector=" AND ".join("({})".format(w) for w in [where, sselector] if w),
+            where=join_selectors([where, sselector]),
             group_order_by=group_order_by,
             batch_size=batch_size
         ) for sselector in series_selectors]
-
         return zip(series_selectors, series_stream)
 
-    def stream_params(self, measurement, fields=None, selector="", group_order_by="", batch_size=DEFAULT_BATCH_SIZE):
+    def stream_params(self, measurement, fields=None, where="", group_order_by="", batch_size=DEFAULT_BATCH_SIZE):
         if fields is None:
             fields = "*"
         elif not isinstance(fields, str):
@@ -125,12 +135,21 @@ class InfluxDBStreamingClient(InfluxDBClient):
         base_query = "SELECT {fields} FROM {measurement} WHERE {where} {group_order_by} " \
                      "LIMIT {{limit}} OFFSET {{offset}}".format(
             fields=fields, measurement=measurement,
-            where=selector, group_order_by=group_order_by)
+            where=where, group_order_by=group_order_by)
 
         return self.stream_query(base_query, batch_size)
 
     def stream_query(self, query_format, batch_size):
+        global thread_pool
+
         streamer = QueryStreamer(self.query, query_format, batch_size)
+
+        if self.async_executor is True:
+            if not thread_pool:
+                thread_pool = concurrent.futures.ThreadPoolExecutor()
+            self.async_executor = thread_pool
+        elif isinstance(self.async_executor, int):
+            self.async_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.async_executor)
 
         if self.async_executor:
             # If an async_executor is available, the iterable will be wrapped in an AsyncLookaheadIterator, that will
@@ -172,6 +191,20 @@ class InfluxDBStreamingClient(InfluxDBClient):
                 return False
             else:
                 raise
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if isinstance(self.async_executor, ThreadPoolExecutor):
+            if self.async_executor == thread_pool:
+                state['async_executor'] = True
+            else:
+                state['async_executor'] = self.async_executor._max_workers
+        del state['_session']
+        return state
+
+    def __setstate__(self, state):
+        state['_session'] = requests.Session()
+        self.__dict__.update(state)
 
 
 @contextmanager
