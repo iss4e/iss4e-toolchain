@@ -117,5 +117,11 @@ def load_config(cwd=os.getcwd(), debug=False):
     if "logging" in config:
         if debug:
             print("Reconfiguring logging from config")
+        if config.get("uncaught_exceptions", True):
+            sys.excepthook = log_uncaught_exception
         logging.config.dictConfig(config["logging"].as_plain_ordered_dict())
     return config
+
+
+def log_uncaught_exception(type, value, tb):
+    logging.exception("Uncaught exception: {0}".format(str(value)), exc_info=(type, value, tb))

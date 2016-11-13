@@ -99,6 +99,7 @@ class InfluxDBStreamingClient(InfluxDBClient):
         self.time_field = kwargs.pop('time_field', 'time')
         self.time_format = kwargs.pop('time_format', None)
         self.time_epoch = kwargs.pop('time_epoch', None)
+        self.batch_size = kwargs.pop('batch_size', DEFAULT_BATCH_SIZE)
         super().__init__(*args, **kwargs)
 
     def close(self):
@@ -113,7 +114,7 @@ class InfluxDBStreamingClient(InfluxDBClient):
         # for each series, create a WHERE clause selecting only entries from that exact series
         return [(serie, join_selectors(series_tag_to_selector(tag) for tag in serie)) for serie in series]
 
-    def stream_measurement(self, measurement, fields=None, where="", group_order_by="", batch_size=DEFAULT_BATCH_SIZE):
+    def stream_measurement(self, measurement, fields=None, where="", group_order_by="", batch_size=None):
         series_selectors = [sselector for (sname, sselector) in self.list_series(measurement)]
         # create an independent row stream for each of those selectors
         series_stream = [self.stream_params(
@@ -126,7 +127,7 @@ class InfluxDBStreamingClient(InfluxDBClient):
         ) for sselector in series_selectors]
         return zip(series_selectors, series_stream)
 
-    def stream_params(self, measurement, fields=None, where="", group_order_by="", batch_size=DEFAULT_BATCH_SIZE):
+    def stream_params(self, measurement, fields=None, where="", group_order_by="", batch_size=None):
         if fields is None:
             fields = "*"
         elif not isinstance(fields, str):
@@ -139,9 +140,11 @@ class InfluxDBStreamingClient(InfluxDBClient):
 
         return self.stream_query(base_query, batch_size)
 
-    def stream_query(self, query_format, batch_size):
+    def stream_query(self, query_format, batch_size=None):
         global thread_pool
 
+        if batch_size is None:
+            batch_size = self.batch_size
         streamer = QueryStreamer(self.query, query_format, batch_size)
 
         if self.async_executor is True:
