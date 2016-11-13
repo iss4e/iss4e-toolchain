@@ -192,6 +192,10 @@ class InfluxDBStreamingClient(InfluxDBClient):
             else:
                 raise
 
+    def _write_points(self, *args, **kwargs):
+        kwargs.setdefault('time_precision', self.time_epoch)
+        super()._write_points(*args, **kwargs)
+
     def __getstate__(self):
         state = self.__dict__.copy()
         if isinstance(self.async_executor, ThreadPoolExecutor):
