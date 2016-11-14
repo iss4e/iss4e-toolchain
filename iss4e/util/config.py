@@ -126,3 +126,4 @@ def load_config(cwd=os.getcwd(), debug=False):
 
 def log_uncaught_exception(type, value, tb):
     logging.exception("Uncaught exception: {0}".format(str(value)), exc_info=(type, value, tb))
+    sys.__excepthook__(type, value, tb)

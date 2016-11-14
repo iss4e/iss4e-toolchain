@@ -95,7 +95,7 @@ def async_progress(futures, queue, delay=5, **kwargs):
     for nr, future in enumerate(futures):
         while not future.done():
             # check whether any future failed
-            assert all([future.result() or True for future in futures if future.done()])
+            assert all([future.result(timeout=0) or True for future in futures if future.done()])
 
             try:
                 # wait 5 secs
