@@ -63,6 +63,15 @@ def series_tag_to_selector(p):
     return "{}::tag='{}'".format(k, v)
 
 
+def series_tag_to_id(p):
+    k, v = p.split("=")
+    return str(v)
+
+
+def series_tags_to_dict(tags):
+    return {k: v for k, v in (tag.split("=") for tag in tags)}
+
+
 def join_selectors(selectors):
     return " AND ".join("({})".format(w) for w in selectors if w)
 
@@ -115,17 +124,16 @@ class InfluxDBStreamingClient(InfluxDBClient):
         return [(serie, join_selectors(series_tag_to_selector(tag) for tag in serie)) for serie in series]
 
     def stream_measurement(self, measurement, fields=None, where="", group_order_by="", batch_size=None):
-        series_selectors = [sselector for (sname, sselector) in self.list_series(measurement)]
+        series = self.list_series(measurement)
         # create an independent row stream for each of those selectors
-        series_stream = [self.stream_params(
+        return [(sname, sselector, self.stream_params(
             measurement=measurement,
             fields=fields,
             # join series WHERE clause and WHERE clause from params
             where=join_selectors([where, sselector]),
             group_order_by=group_order_by,
             batch_size=batch_size
-        ) for sselector in series_selectors]
-        return zip(series_selectors, series_stream)
+        )) for (sname, sselector) in series]
 
     def stream_params(self, measurement, fields=None, where="", group_order_by="", batch_size=None):
         if fields is None:
