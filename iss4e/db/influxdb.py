@@ -165,7 +165,8 @@ class InfluxDBStreamingClient(InfluxDBClient):
         if self.async_executor:
             # If an async_executor is available, the iterable will be wrapped in an AsyncLookaheadIterator, that will
             # use the executor to asynchronously fetch data in the background before it is consumed from the streamer.
-            streamer = AsyncLookaheadIterator(self.async_executor, streamer, logger=async_logger, warm_start=True)
+            streamer = AsyncLookaheadIterator(self.async_executor, streamer, logger=async_logger,
+                                              warm_start=True, parallelism=2)
         if not self.batched:
             # If batched is False, the streamer of iterables will be flattened to a simple iterable.
             streamer = itertools.chain.from_iterable(streamer)
