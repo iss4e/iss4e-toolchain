@@ -1,12 +1,13 @@
 import concurrent.futures
 import inspect
 import logging
-import random
+import os
 from datetime import datetime, timedelta
 from queue import Empty
 from time import perf_counter
 
 from iss4e.util.brace_message import BraceMessage as __
+from tabulate import tabulate
 
 
 def daterange(start, stop=datetime.now(), step=timedelta(days=1)):
@@ -47,6 +48,9 @@ def _print_progress(msg, count, time, rate, avgrate, value, **kwargs):
     logger.log(level, __(msg, count=count, time=time, rate=rate, avgrate=avgrate, value=value))
 
 
+progress_counter_id = 0
+
+
 def progress(iterable, delay=5, remote=None, **kwargs):
     """
     Print a short status message about the number of consumed items to `logger.level` every `delay` seconds as items are
@@ -55,7 +59,9 @@ def progress(iterable, delay=5, remote=None, **kwargs):
     """
 
     if remote:
-        pid = random.random()  # use a new ID for each invocation
+        global progress_counter_id
+        pid = "{}-{}".format(os.getpid(), progress_counter_id)
+        progress_counter_id += 1  # use a new ID for each invocation
     msg = _prepare_message(**kwargs)
     last_print = start = perf_counter()
     last_rows = nr = 0
@@ -92,6 +98,17 @@ def async_progress(futures, queue, delay=5, **kwargs):
     last_print = start = perf_counter()
     last_count = count = 0
     stats = {}
+
+    def update():
+        nonlocal count, last_count, last_print
+        now = perf_counter()
+        count = sum(stats.values())
+        _print_progress("{}-{}/{} ".format(len([f for f in futures if f.done()]), len(stats), len(futures)) + msg,
+                        count=count, time=now - start,
+                        rate=((count - last_count) / (now - last_print)),
+                        avgrate=(count / (now - start)), value=None, **kwargs)
+        last_count, last_print = count, now
+
     for nr, future in enumerate(futures):
         while not future.done():
             # check whether any future failed
@@ -108,13 +125,12 @@ def async_progress(futures, queue, delay=5, **kwargs):
                     stats[pid] = count
                 except Empty:
                     break
-            now = perf_counter()
-            count = sum(stats.values())
-            _print_progress("{}-{}/{} ".format(len([f for f in futures if f.done()]), len(stats), len(futures)) + msg,
-                            count=count, time=now - start,
-                            rate=((count - last_count) / (now - last_print)),
-                            avgrate=(count / (now - start)), value=None, **kwargs)
-            last_count, last_print = count, now
+            update()
+
+    update()
+    logger = kwargs.get('logger', logging)
+    logger.debug("Async progress finished. Stats:\n{}".format(
+        tabulate(sorted(list(stats.items())), headers=["PID", "#"])))
 
 
 def dump_args(frame):
