@@ -73,7 +73,10 @@ def series_tags_to_dict(tags):
 
 
 def join_selectors(selectors):
-    return " AND ".join("({})".format(w) for w in selectors if w)
+    selectors = ["({})".format(w) for w in selectors if w]
+    if len(selectors) == 1:
+        return selectors[0]
+    return " AND ".join(selectors)
 
 
 class QueryStreamer(object):
