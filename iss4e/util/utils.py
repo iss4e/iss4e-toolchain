@@ -34,9 +34,9 @@ def zip_prev(iterable):
 
 
 def _prepare_message(**kwargs):
-    verb = kwargs.pop('verb ', "Processed")
-    objects = kwargs.pop('objects ', "entries")
-    msg = kwargs.pop('msg ', "{verb} {countf} {objects} after {timef}s ({ratef}/{avgratef} {objects} per second)")
+    verb = kwargs.pop('verb', "Processed")
+    objects = kwargs.pop('objects', "entries")
+    msg = kwargs.pop('msg', "{verb} {countf} {objects} after {timef}s ({ratef}/{avgratef} {objects} per second)")
     msg = msg.format(countf='{count:,}', timef='{time:.2f}', ratef='{rate:,.2f}', avgratef='{avgrate:,.2f}',
                      objects=objects, verb=verb)
     return msg
