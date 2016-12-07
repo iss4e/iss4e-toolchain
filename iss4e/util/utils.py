@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 from queue import Empty
 from time import perf_counter
 
-from iss4e.util.brace_message import BraceMessage as __
 from tabulate import tabulate
+
+from iss4e.util.brace_message import BraceMessage as __
 
 
 def daterange(start, stop=datetime.now(), step=timedelta(days=1)):
@@ -119,7 +120,7 @@ def async_progress(futures, queue, delay=5, **kwargs):
                 future.result(timeout=delay)
             except concurrent.futures.TimeoutError:
                 pass
-            while True:
+            while queue is not None:
                 try:
                     pid, count = queue.get_nowait()
                     stats[pid] = count
