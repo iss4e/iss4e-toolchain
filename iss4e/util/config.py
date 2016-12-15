@@ -104,7 +104,8 @@ def load_config(cwd=os.getcwd(), debug=False):
             file + " [" + ("not " if not os.path.isfile(file) else "") + "found]" for file in files))
     # merge all levels of config
     config = ConfigTree(root=True)
-    config.put("__main__", os.path.basename(sys.modules['__main__'].__file__))
+    config.put("__main__", os.path.basename(getattr(sys.modules['__main__'], "__file__", "__cli__")))
+    config.put("__cwd__", os.path.abspath(cwd))
     for c in configs:
         config = ConfigTree.merge_configs(c, config)
     config = ConfigParser.resolve_substitutions(config)
@@ -137,7 +138,7 @@ def _module_is_frozen():
     return hasattr(sys, "frozen")
 
 
-def module_path():
+def module_path():  # TODO module name or __file__
     if _module_is_frozen():
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
