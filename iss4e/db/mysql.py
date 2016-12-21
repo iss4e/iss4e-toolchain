@@ -46,7 +46,7 @@ Connection = _Connection
 
 
 @contextmanager
-def connect(**kwargs):
+def connect(**kwargs) -> _Connection:
     warnings.filterwarnings('error', category=pymysql.Warning)
     connection = _Connection(**kwargs)
     start = time.perf_counter()

@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 from queue import Empty
 from time import perf_counter
 
-from iss4e.util.brace_message import BraceMessage as __
 from tabulate import tabulate
+
+from iss4e.util.brace_message import BraceMessage as __
 
 
 def daterange(start, stop=datetime.now(), step=timedelta(days=1)):
@@ -34,9 +35,9 @@ def zip_prev(iterable):
 
 
 def _prepare_message(**kwargs):
-    verb = kwargs.pop('verb ', "Processed")
-    objects = kwargs.pop('objects ', "entries")
-    msg = kwargs.pop('msg ', "{verb} {countf} {objects} after {timef}s ({ratef}/{avgratef} {objects} per second)")
+    verb = kwargs.pop('verb', "Processed")
+    objects = kwargs.pop('objects', "entries")
+    msg = kwargs.pop('msg', "{verb} {countf} {objects} after {timef}s ({ratef}/{avgratef} {objects} per second)")
     msg = msg.format(countf='{count:,}', timef='{time:.2f}', ratef='{rate:,.2f}', avgratef='{avgrate:,.2f}',
                      objects=objects, verb=verb)
     return msg
@@ -119,7 +120,7 @@ def async_progress(futures, queue, delay=5, **kwargs):
                 future.result(timeout=delay)
             except concurrent.futures.TimeoutError:
                 pass
-            while True:
+            while queue is not None:
                 try:
                     pid, count = queue.get_nowait()
                     stats[pid] = count

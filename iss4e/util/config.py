@@ -1,12 +1,10 @@
 import logging.config
 import os
 import sys
-from os.path import join, dirname, expanduser
+import warnings
+from os.path import dirname, expanduser, join
 
-from pyhocon import ConfigFactory
-from pyhocon import ConfigParser
-from pyhocon import ConfigTree
-from pyhocon import HOCONConverter
+from pyhocon import ConfigFactory, ConfigParser, ConfigTree, HOCONConverter
 
 
 def get_parents(leaf, include_leaf=False):
@@ -121,7 +119,28 @@ def load_config(cwd=os.getcwd(), debug=False):
             sys.excepthook = log_uncaught_exception
         logging.captureWarnings(config.get("capture_warnings", True))
         logging.config.dictConfig(config["logging"].as_plain_ordered_dict())
+
+    # check python version
+    # iss4e lib is using some syntax features and functions which were only introduced in python 3.5
+    rec_ver = tuple(config.get("min_py_version", [3, 5]))
+    if sys.version_info < rec_ver:
+        warnings.warn(
+            "Using outdated python version {}, a version >= {} would be recommended for use with iss4e lib. "
+            "Try using a newer python binary, e.g. by calling `python{}.{}` instead of the default `python`."
+                .format(sys.version_info, rec_ver, rec_ver[0], rec_ver[1]))
+
     return config
+
+
+def _module_is_frozen():
+    # All of the modules are built-in to the interpreter, e.g., by py2exe
+    return hasattr(sys, "frozen")
+
+
+def module_path():
+    if _module_is_frozen():
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 def log_uncaught_exception(type, value, tb):
