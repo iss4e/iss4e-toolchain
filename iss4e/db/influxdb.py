@@ -141,7 +141,7 @@ class InfluxDBStreamingClient(InfluxDBClient):
         elif not isinstance(fields, str):
             fields = ", ".join(fields)
 
-        base_query = "SELECT {fields} FROM {measurement} WHERE {where} {group_order_by} " \
+        base_query = "SELECT {fields} FROM {measurement} WHERE {where} GROUP BY {group_order_by} " \
                      "LIMIT {{limit}} OFFSET {{offset}}".format(
             fields=fields, measurement=measurement,
             where=where, group_order_by=group_order_by)
